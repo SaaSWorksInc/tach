@@ -76,6 +76,10 @@ ensure-debugging-enabled: ## enable support for attaching debuggers (required fo
 	./pw uv run scripts/ensure_debugging_enabled.py
 
 
+release-fork: ## cut a pinnable release on a fork (VERSION=0.35.0+label.1)
+	./pw uv run scripts/release_fork.py $(VERSION)
+
+
 .PHONY: help
 help:  ## Display this help screen
 	@echo -e "\033[1mAvailable commands:\033[0m"
