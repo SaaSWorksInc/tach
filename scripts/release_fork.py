@@ -26,6 +26,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import quote
 
 REPO_ROOT = Path(__file__).parent.parent
 WHEEL_DIR = REPO_ROOT / "target" / "wheels"
@@ -188,13 +189,15 @@ def publish_release(
 
 def uv_source_block(repo: str, tag: str, wheels: list[Path]) -> str:
     """The `[tool.uv.sources]` entry pinning tach to this release's wheels."""
-    base = f"https://github.com/{repo}/releases/download/{tag}"
+    # GitHub percent-encodes the '+' of a local version in its download URLs,
+    # in both the tag and the file name.
+    base = f"https://github.com/{repo}/releases/download/{quote(tag)}"
     entries: list[str] = []
     for wheel in wheels:
         marker = next(
             (m for pattern, m in PLATFORM_MARKERS if pattern.search(wheel.name)), None
         )
-        url = f"{base}/{wheel.name}"
+        url = f"{base}/{quote(wheel.name)}"
         if marker is None:
             entries.append(f'  {{ url = "{url}" }},')
         else:
