@@ -10,8 +10,10 @@ versions outright, so a fork build can never be published there by accident.
 
     ./pw uv run scripts/release_fork.py 0.35.0+deadcode.1
 
-wheels are built for the host platform only. to release for other platforms,
-build them elsewhere and pass each one in:
+wheels are built for the host platform only. pushing the tag also starts
+.github/workflows/fork-release-linux.yml, which builds the Linux wheels and
+attaches them to the same release — so a full release needs Actions enabled on
+the fork. wheels built anywhere else can be attached directly:
 
     ./pw uv run scripts/release_fork.py 0.35.0+deadcode.1 \
         --wheel dist/tach-0.35.0+deadcode.1-cp37-abi3-manylinux_2_17_x86_64.whl
@@ -142,6 +144,48 @@ def build_wheel(*, dry_run: bool) -> list[Path]:
     return built
 
 
+def publish_release(
+    repo: str, tag: str, notes: str, wheels: list[Path], *, dry_run: bool
+) -> None:
+    """Create the release and attach `wheels`, or attach to it if it exists.
+
+    Pushing the tag starts the Linux wheel workflow, which creates the release
+    if it gets there first, so this cannot assume it is the one creating it.
+    """
+    assets = [str(wheel) for wheel in wheels]
+    exists = not dry_run and (
+        subprocess.run(
+            ["gh", "release", "view", tag, "--repo", repo],
+            cwd=REPO_ROOT,
+            capture_output=True,
+        ).returncode
+        == 0
+    )
+    if exists:
+        print(f"  release {tag} already exists, attaching wheels to it")
+        run(
+            ["gh", "release", "upload", tag, "--repo", repo, "--clobber", *assets],
+            dry_run=dry_run,
+        )
+        return
+    run(
+        [
+            "gh",
+            "release",
+            "create",
+            tag,
+            "--repo",
+            repo,
+            "--title",
+            tag,
+            "--notes",
+            notes,
+            *assets,
+        ],
+        dry_run=dry_run,
+    )
+
+
 def uv_source_block(repo: str, tag: str, wheels: list[Path]) -> str:
     """The `[tool.uv.sources]` entry pinning tach to this release's wheels."""
     base = f"https://github.com/{repo}/releases/download/{tag}"
@@ -221,22 +265,7 @@ def main() -> None:
     run(["git", "commit", "--all", "--message", f"release {version}"], dry_run=dry_run)
     run(["git", "tag", tag], dry_run=dry_run)
     run(["git", "push", "origin", "HEAD", tag], dry_run=dry_run)
-    run(
-        [
-            "gh",
-            "release",
-            "create",
-            tag,
-            "--repo",
-            repo,
-            "--title",
-            tag,
-            "--notes",
-            args.notes or tag,
-            *(str(wheel) for wheel in wheels),
-        ],
-        dry_run=dry_run,
-    )
+    publish_release(repo, tag, args.notes or tag, wheels, dry_run=dry_run)
 
     print(f"\nreleased: https://github.com/{repo}/releases/tag/{tag}")
     if wheels:
