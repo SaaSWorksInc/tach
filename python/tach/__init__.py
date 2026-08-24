@@ -1,5 +1,5 @@
 from __future__ import annotations
 
-__version__: str = "0.35.0+deadcode.1"
+__version__: str = "0.35.0+deadcode.2"
 
 __all__ = ["__version__"]
