@@ -98,10 +98,10 @@ def fail(message: str) -> None:
     raise SystemExit(1)
 
 
-def fork_repo() -> str:
-    """The `owner/name` of the `origin` remote, which must not be upstream."""
+def fork_repo(remote: str) -> str:
+    """The `owner/name` behind `remote`, which must not be upstream."""
     url = subprocess.run(
-        ["git", "remote", "get-url", "origin"],
+        ["git", "remote", "get-url", remote],
         cwd=REPO_ROOT,
         check=True,
         capture_output=True,
@@ -109,13 +109,13 @@ def fork_repo() -> str:
     ).stdout.strip()
     match = re.search(r"[:/]([^/:]+/[^/]+?)(?:\.git)?$", url)
     if not match:
-        fail(f"could not read a repository out of the origin remote: {url}")
+        fail(f"could not read a repository out of the {remote} remote: {url}")
         raise AssertionError  # unreachable, keeps the type checker happy
     repo = match.group(1)
     if repo.lower() == UPSTREAM.lower():
         fail(
-            f"origin is {UPSTREAM}. publishing a release there triggers the PyPI"
-            " upload in .github/workflows/publish.yml; point origin at a fork."
+            f"remote '{remote}' is {UPSTREAM}. publishing a release there triggers the"
+            " PyPI and marketplace uploads in .github/workflows/; release to a fork."
         )
     return repo
 
@@ -221,6 +221,11 @@ def main() -> None:
         " May be repeated.",
     )
     _ = parser.add_argument(
+        "--remote",
+        default="origin",
+        help="git remote of the fork to release to (default: origin)",
+    )
+    _ = parser.add_argument(
         "--notes", default=None, help="release notes body (default: the tag name)"
     )
     _ = parser.add_argument(
@@ -233,6 +238,7 @@ def main() -> None:
     version: str = args.version
     extra_wheels: list[Path] = args.wheel
     dry_run: bool = args.dry_run
+    remote: str = args.remote
 
     if not VERSION_PATTERN.match(version):
         fail(
@@ -244,7 +250,7 @@ def main() -> None:
         if not wheel.is_file():
             fail(f"no such wheel: {wheel}")
 
-    repo = fork_repo()
+    repo = fork_repo(remote)
     tag = f"v{version}"
     print(f"releasing {version} as {tag} on {repo}")
 
@@ -267,7 +273,7 @@ def main() -> None:
 
     run(["git", "commit", "--all", "--message", f"release {version}"], dry_run=dry_run)
     run(["git", "tag", tag], dry_run=dry_run)
-    run(["git", "push", "origin", "HEAD", tag], dry_run=dry_run)
+    run(["git", "push", remote, "HEAD", tag], dry_run=dry_run)
     publish_release(repo, tag, args.notes or tag, wheels, dry_run=dry_run)
 
     print(f"\nreleased: https://github.com/{repo}/releases/tag/{tag}")
